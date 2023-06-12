@@ -12,7 +12,8 @@ export RESOURCE_GROUP=SpringBoot # customize this
 export REGION=westus2 # customize this
 export VM_NAME=springboot-vm
 export VM_IMAGE=UbuntuLTS
-export ADMIN_USERNAME=vm-admin-name # customize this```
+export ADMIN_USERNAME=vm-admin-name # customize this
+```
 
 Log in and create VM: 
 
@@ -25,11 +26,14 @@ az vm create \
   --image ${VM_IMAGE} \
   --admin-username ${ADMIN_USERNAME} \
   --generate-ssh-keys \
-  --public-ip-sku Standard --size standard_d4s_v3```
+  --public-ip-sku Standard --size standard_d4s_v3
+  ```
 
 Store the VM IP address for later: 
 
-```VM_IP_ADDRESS=`az vm show -d -g ${RESOURCE_GROUP} -n ${VM_NAME} --query publicIps -o tsv` ```
+```
+VM_IP_ADDRESS=`az vm show -d -g ${RESOURCE_GROUP} -n ${VM_NAME} --query publicIps -o tsv` 
+```
 
 Run the following to open port 8080 on the vm since SpringBoot uses it
 
