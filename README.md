@@ -63,5 +63,6 @@ Run and deploy the app
 ```mvn clean install
 mvn spring-boot:run  
 ```
-# Go TO http://[$VM_IP_ADDRESS]:8080 to confirm that it's working :D :D :D 
+
+Finally go to http://[$VM_IP_ADDRESS]:8080 to confirm that it's working :D :D :D 
 
