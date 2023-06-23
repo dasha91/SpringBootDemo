@@ -1,6 +1,29 @@
 # SpringBootDemo
 Spring Boot application that we will deploy to Kubernetes clusters in all 3 clouds
 
+# Building and deploying the docker image: 
+docker build -t spring-boot-demo.jar .
+docker run -p 9091:8080 spring-boot-demo.jar
+
+
+# Deploying to Kubernetes
+
+## GKE 
+
+Requirements: 
+Set up a docker account 
+gcloud components install docker-credential-gcr
+gcloud components install kubectl
+
+Create artifact repository
+gcloud artifacts repositories create spring-boot-demo-repo --repository-format=docker --location=us-west1
+
+gcloud auth configure-docker us-west1-docker.pkg.dev
+docker tag spring-boot-demo.jar:latest us-west1-docker.pkg.dev/danial-sandbox/spring-boot-demo-repo/spring-boot-demo:v1
+docker push us-west1-docker.pkg.dev/danial-sandbox/spring-boot-demo-repo/spring-boot-demo:v1
+
+gcloud container clusters create spring-boot-cluster
+
 
 # Deploying to VM
 
@@ -65,4 +88,61 @@ mvn spring-boot:run
 ```
 
 Finally go to http://[$VM_IP_ADDRESS]:8080 to confirm that it's working :D :D :D 
+
+
+## GCP 
+
+### Create and connect to the VM 
+Set up parameter variables: 
+
+```
+export PROJECT=danial-sandbox 
+export COMPUTE_ZONE=us-west1-b
+export IMAGE_PROJECT=ubuntu-os-pro-cloud # customize this
+export VM_NAME=springboot-vm3
+export IMAGE_FAMILY=ubuntu-pro-2004-lts
+```
+
+Log in and create VM: 
+
+```
+gcloud config set project ${PROJECT}
+gcloud config set compute/zone ${COMPUTE_ZONE}
+gcloud compute instances create ${VM_NAME} \
+    --image-family=${IMAGE_FAMILY} \
+    --image-project=${IMAGE_PROJECT}
+  ```
+
+Store the external VM IP address for later: 35.247.53.26
+
+Run the following to open port 8080 on the vm since SpringBoot uses it
+
+```
+gcloud compute firewall-rules create allow-ssh \
+    --action=ALLOW \
+    --direction=INGRESS \
+    --priority=1000 \
+    --rules=tcp:22 \
+    --source-ranges=0.0.0.0/0
+gcloud compute firewall-rules create allow8080 \
+    --action=ALLOW \
+    --direction=INGRESS \
+    --priority=1000 \
+    --rules=tcp:8080 \
+    --source-ranges=0.0.0.0/0
+gcloud compute firewall-rules create allow-outbound \
+    --action=ALLOW \
+    --direction=EGRESS \
+    --priority=1000 \
+    --rules=all \
+    --source-ranges=0.0.0.0/0
+```
+Connect to the VM: 
+
+either through this command: 
+
+`gcloud compute ssh --project=${PROJECT} --zone=${COMPUTE_ZONE} ${VM_NAME}`
+
+or through the portal at compute engine -> VM instances -> Connect SSH
+
 
