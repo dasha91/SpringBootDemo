@@ -3,6 +3,7 @@ package com.cci.SpringBootDemo.entity;
 import javax.persistence.*;
 
 @Entity
+@Table(name = "application")
 public class Application {
 
     @Id

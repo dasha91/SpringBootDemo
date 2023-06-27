@@ -14,15 +14,20 @@ Requirements:
 Set up a docker account 
 gcloud components install docker-credential-gcr
 gcloud components install kubectl
+gcloud config set project angular-axe-306514
 
 Create artifact repository
 gcloud artifacts repositories create spring-boot-demo-repo --repository-format=docker --location=us-west1
 
 gcloud auth configure-docker us-west1-docker.pkg.dev
-docker tag spring-boot-demo.jar:latest us-west1-docker.pkg.dev/danial-sandbox/spring-boot-demo-repo/spring-boot-demo:v1
-docker push us-west1-docker.pkg.dev/danial-sandbox/spring-boot-demo-repo/spring-boot-demo:v1
+docker tag spring-boot-demo.jar:latest us-west1-docker.pkg.dev/angular-axe-306514/spring-boot-demo-repo/spring-boot-demo:v1
+docker push us-west1-docker.pkg.dev/angular-axe-306514/spring-boot-demo-repo/spring-boot-demo:v1
 
 gcloud container clusters create spring-boot-cluster
+
+gcloud container clusters get-credentials spring-boot-cluster
+
+kubectl create deployment spring-boot-deployment --image=us-west1-docker.pkg.dev/angular-axe-306514/spring-boot-demo-repo/spring-boot-demo:v1
 
 
 # Deploying to VM
