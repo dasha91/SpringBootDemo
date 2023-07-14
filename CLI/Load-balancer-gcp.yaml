@@ -6,7 +6,7 @@ metadata:
     cloud.google.com/load-balancer-type: "Internal"
 spec:
   selector:
-    app: spring-boot-deployment1
+    app: spring-boot-demo
   type: LoadBalancer
   ports:
     - protocol: TCP
