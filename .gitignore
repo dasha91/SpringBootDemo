@@ -31,3 +31,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+.DS_Store
+**/.DS_Store
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/DNS-ServiceKey.json
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform/*

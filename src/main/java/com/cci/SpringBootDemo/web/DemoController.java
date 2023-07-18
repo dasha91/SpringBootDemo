@@ -29,7 +29,7 @@ public class DemoController {
     @PostMapping("/")
     public String applicationSubmit(@ModelAttribute Application application, Model model) {
         System.out.println(application.toString());
-        application.setId(1L);
+        //application.setId(1L);
         model.addAttribute("applications", applicationService.update(application));
         return "index";
     }
