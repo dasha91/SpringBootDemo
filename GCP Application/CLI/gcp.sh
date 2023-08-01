@@ -25,10 +25,6 @@ docker push us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spr
 gcloud container clusters create spring-boot-cluster --workload-pool=cci-sandbox-danial.svc.id.goog
 gcloud container clusters get-credentials spring-boot-cluster
 
-################################################## Create deployment to  ##################################################
-    kubectl create deployment spring-boot-deployment2 --image=us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v2
-    kubectl apply -f Load-balancer-gcp.yaml #Make sure to update internal-lb app to the deployment name: spring-boot-deployment1
-
 ################### Create Postgres db ######################
 gcloud sql instances create spring-boot-postgres-instance --database-version=POSTGRES_14 --cpu=2 --memory=7680MB --region=us-west1
 gcloud sql users set-password postgres --instance=spring-boot-postgres-instance --password=Sup3rS3cret!
@@ -38,10 +34,6 @@ kubectl create secret generic kubernetes-db-secret \
   --from-literal=username=postgres \
   --from-literal=password=Sup3rS3cret! \
   --from-literal=database=demo
-
-    # activate workload identity on cluster
-    gcloud container clusters update spring-boot-cluster \
-        --workload-pool=cci-sandbox-danial.svc.id.goog
 
 ############## Create Service account for cloud sql auth proxy 
 # Following this doc: https://cloud.google.com/sql/docs/mysql/connect-kubernetes-engine
