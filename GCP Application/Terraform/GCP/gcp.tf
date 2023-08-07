@@ -1,14 +1,6 @@
-resource "google_container_cluster" "gke" {
-  project = var.project_id
-  name    = "${var.project_id}-terraform-gke"
-  location = var.region
-  initial_node_count       = 1
-  workload_identity_config {
-    workload_pool = "${var.project_id}.svc.id.goog"
-  }
-}
+##################################################  Create Postgres  #################################################
 # terraform import google_container_cluster.spring_boot_cluster cci-sandbox-danial/us-west1-b/spring-boot-cluster
-resource "google_sql_database_instance" "postgres_instance" {
+resource "google_sql_database_instance" "postgres_instance" { #7m 48s
   database_version = "POSTGRES_14"
   name             = "terraform-postgres-instance"
   project = var.project_id
@@ -18,20 +10,18 @@ resource "google_sql_database_instance" "postgres_instance" {
     tier         = "db-f1-micro"
   }
 }
-
-resource "google_sql_database" "demo-db" {
+resource "google_sql_database" "demo-db" { #5s
   name     = "demo"
   instance = google_sql_database_instance.postgres_instance.name
 }
 
-resource "google_sql_user" "users" {
+resource "google_sql_user" "users" { #8s
   name     = "postgres"
   instance = google_sql_database_instance.postgres_instance.name
   password = "Sup3rS3cret!"
 }
-
-
-resource "google_service_account" "postgres_springboot_demo_sa" {
+##################################################  Creating Cloud SQL Proxy (Counts as Postgres)##################################################
+resource "google_service_account" "postgres_springboot_demo_sa" { #2s
   account_id   = "postgres-terraform-sa"
   project      = var.project_id
 }
@@ -48,7 +38,7 @@ resource "kubernetes_service_account" "kubernetes_sa" {
   }
 }
 
-resource "kubernetes_secret" "db-secret" {
+resource "kubernetes_secret" "db-secret" { #1s
   metadata {
     name = "db-secret"
   }
@@ -60,7 +50,7 @@ resource "kubernetes_secret" "db-secret" {
   }
 }
 
-resource "google_project_iam_binding" "sql-admin-binding" {
+resource "google_project_iam_binding" "sql-admin-binding" { #8s
   project = var.project_id
   role    = "roles/cloudsql.admin"
 
@@ -68,7 +58,7 @@ resource "google_project_iam_binding" "sql-admin-binding" {
     "serviceAccount:${google_service_account.postgres_springboot_demo_sa.email}",
   ]
 }
-resource "google_service_account_iam_binding" "admin-account-iam" {
+resource "google_service_account_iam_binding" "admin-account-iam" { # 4s
   service_account_id = google_service_account.postgres_springboot_demo_sa.name
   role               = "roles/iam.workloadIdentityUser"
 
@@ -77,9 +67,20 @@ resource "google_service_account_iam_binding" "admin-account-iam" {
   ]
 }
 
+##################################################  Create GKE  ##################################################
+resource "google_container_cluster" "gke" { #5m 46s
+  project = var.project_id
+  name    = "${var.project_id}-terraform-gke"
+  location = var.region
+  initial_node_count       = 1
+  workload_identity_config {
+    workload_pool = "${var.project_id}.svc.id.goog"
+  }
+}
+
+##################################################  Creating deployment with ingress ##################################################
 // Ingress controller that passes traffic to the internal load balancer that sends traffic to the application itself.
-// Also where we define the managed cert it will use for https
-resource "kubernetes_ingress_v1" "ingress" {
+resource "kubernetes_ingress_v1" "ingress" { #1s
   metadata {
     name = "managed-cert-ingress"
     annotations = {
@@ -98,8 +99,7 @@ resource "kubernetes_ingress_v1" "ingress" {
   }
 }
 
-// Internal load balancer that sends traffic to the Vote-App
-resource "kubernetes_service" "lb" {
+resource "kubernetes_service" "lb" { #1m 26s
   metadata {
     name = "lb"
      annotations = {
@@ -121,7 +121,7 @@ resource "kubernetes_service" "lb" {
 
 // This is the vote application that we are deploying. It's the same as the applications above and is based off 
 // the Azure tutorial found here: https://learn.microsoft.com/en-us/azure/aks/tutorial-kubernetes-prepare-app
-resource "kubernetes_deployment" "spring-boot-demo" {
+resource "kubernetes_deployment" "spring-boot-demo" { #26s
   metadata {
     name = "spring-boot-demo"
     labels = {
@@ -143,7 +143,7 @@ resource "kubernetes_deployment" "spring-boot-demo" {
       spec {
         service_account_name = kubernetes_service_account.kubernetes_sa.metadata.0.name
         container {
-          image = "us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v3"
+          image = "us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v1"
           name  = "spring-boot-demo"
           env {
             name = "DB_USER"

@@ -1,3 +1,0 @@
-Following resources are marked to be skipped:
-
-- /subscriptions/ad70ac39-7cb2-4ed2-8678-f192bc4272b6/resourceGroups/aks-postgres-compete/providers/Microsoft.DBforPostgreSQL/servers/aks-cli-postgres/securityAlertPolicies/Default

@@ -2,41 +2,54 @@
 https://medium.com/aws-infrastructure/setup-kubernetes-cluster-with-aws-eks-and-terraform-c46d5e916ad9 
 https://aws-ia.github.io/terraform-aws-eks-blueprints/v4.32.1/core-concepts/
 https://antonputra.com/amazon/create-eks-cluster-using-terraform-modules/#deploy-aws-load-balancer-controller
-
 */
-module "aws_load_balancer_controller_irsa_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-   version = "~> 5.0"
 
-  role_name = "aws-load-balancer-controller"
+##################################################  Create Postgres  #################################################
+resource "aws_db_instance" "postgres" { # 4m49
+  identifier             = "terraform-postgres"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 5
+  engine                 = "postgres"
+  engine_version         = "15.3"
+  username               = "postgres"
+  password               = "Sup3rS3cret!"
+  db_subnet_group_name   = aws_db_subnet_group.terraform_rds_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+#  parameter_group_name   = aws_db_parameter_group.postgres.name
+  publicly_accessible    = true
+  skip_final_snapshot    = true
+}
 
-  attach_load_balancer_controller_policy = true
+resource "aws_security_group" "rds" { # 5s
+  name   = "terraform_rds_security_group"
+  vpc_id = module.vpc.vpc_id
 
-  oidc_providers = {
-    ex = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:aws-load-balancer-controller"]
-    }
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-module "vpc_cni_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.0"
-
-  role_name_prefix      = "VPC-CNI-IRSA"
-  attach_vpc_cni_policy = true
-  vpc_cni_enable_ipv4   = true
-
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:aws-node"]
-    }
-  }
+resource "aws_db_subnet_group" "terraform_rds_subnet_group" { #2s
+  name       = "terraform_rds_subnet_group"
+  subnet_ids = module.vpc.public_subnets
 }
 
-module "eks" {
+output "db-endpoint" {
+    value = aws_db_instance.postgres.endpoint
+}
+
+##################################################  Create EKS  ##################################################
+module "eks" { # 803.92s - 6.2287s =797s
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 19.0"
 
@@ -107,7 +120,7 @@ module "eks" {
 }
 
 
-module "vpc" {
+module "vpc" { #142.6322s -17.27 =125s
   source = "terraform-aws-modules/vpc/aws"
 
   name = "terraform-vpc"
@@ -130,8 +143,8 @@ module "vpc" {
   }
 
 }
-
-module "vpc_cni_irsa_role" {
+##################################################  Creating deployment with ingress ##################################################
+module "vpc_cni_irsa_role" { #4sec
   source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
 
   role_name = "vpc-cni"
@@ -147,7 +160,7 @@ module "vpc_cni_irsa_role" {
   }
 }
 
-resource "helm_release" "aws_load_balancer_controller" {
+resource "helm_release" "aws_load_balancer_controller" { #22sec
   name = "aws-load-balancer-controller"
 
   repository = "https://aws.github.io/eks-charts"
@@ -175,7 +188,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   }
 }
 
-resource "aws_iam_role_policy" "aws_load_balancer_controller_policy" {
+resource "aws_iam_role_policy" "aws_load_balancer_controller_policy" { #1s
   name   = "aws-load-balancer-controller-policy"
   role   = module.aws_load_balancer_controller_irsa_role.iam_role_name
 
@@ -195,7 +208,7 @@ resource "aws_iam_role_policy" "aws_load_balancer_controller_policy" {
 }
 
 
-resource "kubernetes_ingress_v1" "managed-cert-ingress" {
+resource "kubernetes_ingress_v1" "ingress" { #1s
   metadata {
     name = "ingress"
     annotations = {
@@ -216,7 +229,7 @@ resource "kubernetes_ingress_v1" "managed-cert-ingress" {
   }
 }
 
-resource "kubernetes_service" "nodeport" {
+resource "kubernetes_service" "nodeport" { #1s
   metadata {
     name = "node-port"
   }
@@ -233,7 +246,7 @@ resource "kubernetes_service" "nodeport" {
   }
 }
 
-resource "kubernetes_deployment" "demo_deployment" {
+resource "kubernetes_deployment" "demo_deployment" { #28s
   metadata {
     name = "deployment"
   }
@@ -262,51 +275,34 @@ resource "kubernetes_deployment" "demo_deployment" {
   }
 }
 
+module "aws_load_balancer_controller_irsa_role" { #2s
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+   version = "~> 5.0"
 
+  role_name = "aws-load-balancer-controller"
 
-resource "aws_db_instance" "education" {
-  identifier             = "terraform-postgres"
-  instance_class         = "db.t3.micro"
-  allocated_storage      = 5
-  engine                 = "postgres"
-  engine_version         = "15.3"
-  username               = "postgres"
-  password               = "Sup3rS3cret!"
-  db_subnet_group_name   = aws_db_subnet_group.terraform_rds_subnet_group.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
-#  parameter_group_name   = aws_db_parameter_group.education.name
-  publicly_accessible    = true
-  skip_final_snapshot    = true
-}
+  attach_load_balancer_controller_policy = true
 
-resource "aws_security_group" "rds" {
-  name   = "terraform_rds_security_group"
-  vpc_id = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  oidc_providers = {
+    ex = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:aws-load-balancer-controller"]
+    }
   }
 }
 
-resource "aws_db_subnet_group" "terraform_rds_subnet_group" {
-  name       = "terraform_rds_subnet_group"
-  subnet_ids = module.vpc.public_subnets
-}
+module "vpc_cni_irsa" { #5s
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.0"
 
-output "db-endpoint" {
-    value = aws_db_instance.education.endpoint
-}
+  role_name_prefix      = "VPC-CNI-IRSA"
+  attach_vpc_cni_policy = true
+  vpc_cni_enable_ipv4   = true
 
-output "ingress-endpoint"{
-    value = kubernetes_ingress_v1.managed-cert-ingress.status.0.load_balancer.0.ingress.0.hostname
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:aws-node"]
+    }
+  }
 }
