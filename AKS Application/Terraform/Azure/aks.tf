@@ -1,3 +1,30 @@
+variable "virtual_network_address_prefix" {
+  description = "VNET address prefix"
+  default     = "192.168.0.0/16"
+}
+
+variable "aks_subnet_name" {
+  description = "Subnet Name."
+  default     = "kubesubnet"
+}
+
+variable "aks_subnet_address_prefix" {
+  description = "Subnet address prefix."
+  default     = "192.168.0.0/24"
+}
+
+
+data "azurerm_key_vault" "example" {
+  name                = "AXA-Compete-Key-Vault"
+  resource_group_name = "AXA-Root"
+}
+
+data "azurerm_key_vault_secret" "postgres-password" {
+  name         = "postgres-password"
+  key_vault_id = data.azurerm_key_vault.example.id
+}
+
+
 ##################################################  Create Postgres  #################################################
 resource "azurerm_resource_group" "rg" { # 1s
   location = "eastus"
@@ -13,8 +40,8 @@ resource "azurerm_postgresql_server" "postgres" { # 2m9s
   ssl_minimal_tls_version_enforced = "TLSEnforcementDisabled"
   version                          = "11"
   administrator_login              = "postgres"
-  administrator_login_password     = "Sup3rS3cret!"
-  public_network_access_enabled    = true
+  administrator_login_password     = data.azurerm_key_vault_secret.postgres-password.value
+  public_network_access_enabled    = false
   threat_detection_policy {
     enabled = true
   }
@@ -31,13 +58,6 @@ resource "azurerm_postgresql_database" "demoDB" { # 17s
   server_name         = azurerm_postgresql_server.postgres.name
 }
 
-resource "azurerm_postgresql_firewall_rule" "allowIP" { # 17s
-  end_ip_address      = "255.255.255.255"
-  name                = "enable-global-connection"
-  resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_postgresql_server.postgres.name
-  start_ip_address    = "0.0.0.0"
-}
 
 ##################################################  Create AKS  ##################################################
 // az aks get-credentials -g aks-postgres-terraform -n aks-terraform-cluster
@@ -50,6 +70,7 @@ resource "azurerm_kubernetes_cluster" "aks" { # 3m15s
     name    = "default"
     node_count      = 2
     vm_size = "Standard_DS2_v2"
+    vnet_subnet_id = azurerm_subnet.kubesubnet.id
   }
   identity {
     type = "SystemAssigned"
@@ -63,6 +84,57 @@ resource "azurerm_role_assignment" "acr_role_assignment" { #25s
   scope                = "/subscriptions/ad70ac39-7cb2-4ed2-8678-f192bc4272b6/resourceGroups/aks-postgres-compete/providers/Microsoft.ContainerRegistry/registries/postgresacr"
   role_definition_name = "AcrPull"
   principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+}
+
+resource "azurerm_virtual_network" "aksVnet" {
+  name                = "Terraform-vnet"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  address_space       = [var.virtual_network_address_prefix]
+}
+
+resource "azurerm_subnet" "kubesubnet" {
+    name           = var.aks_subnet_name
+    resource_group_name = azurerm_resource_group.rg.name
+    virtual_network_name = azurerm_virtual_network.aksVnet.name
+  address_prefixes                                 = [var.aks_subnet_address_prefix]
+  private_link_service_network_policies_enabled = false
+}  
+
+################################################# Private Endpoint 
+
+resource "azurerm_private_endpoint" "postgresEndpoint" {
+  name                = "postgresEndpoint"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  subnet_id           = azurerm_subnet.kubesubnet.id
+
+  private_service_connection {
+    name                           = "terraform-postgres-connection"
+    private_connection_resource_id = azurerm_postgresql_server.postgres.id
+    subresource_names              = ["postgresqlServer"]
+    is_manual_connection           = false
+  }
+}
+
+resource "azurerm_private_dns_zone" "dns_zone" {
+  name                = "privatelink.postgres.database.azure.com"
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "example" {
+  name                  = "terraform-dns-link"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.dns_zone.name
+  virtual_network_id    = azurerm_virtual_network.aksVnet.id
+}
+
+resource "azurerm_private_dns_a_record" "example" {
+  name                = "myserver"
+  resource_group_name = azurerm_resource_group.rg.name
+  zone_name           = azurerm_private_dns_zone.dns_zone.name
+  ttl                 = 300
+  records             = [azurerm_private_endpoint.postgresEndpoint.private_service_connection[0].private_ip_address]
 }
 
 ##################################################  Creating deployment with ingress ##################################################
@@ -125,7 +197,7 @@ resource "kubernetes_deployment" "demo_deployment" { #27s
 
       spec {
         container {
-          image = "postgresacr.azurecr.io/spring-boot-demo:v1"
+          image = "postgresacr.azurecr.io/spring-boot-demo:v5"
           name  = "spring-boot-demo"
         }
       }

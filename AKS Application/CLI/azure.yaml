@@ -44,5 +44,5 @@ spec:
         app:  spring-boot-demo
     spec:
       containers:
-      - image: postgresacr.azurecr.io/spring-boot-demo:v1
+      - image: postgresacr.azurecr.io/spring-boot-demo:v4
         name: spring-boot-demo
