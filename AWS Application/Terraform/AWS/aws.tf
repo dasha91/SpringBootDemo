@@ -5,6 +5,28 @@ https://antonputra.com/amazon/create-eks-cluster-using-terraform-modules/#deploy
 */
 
 ##################################################  Create Postgres  #################################################
+data "aws_secretsmanager_secret" "postgres" {
+  name = "postgres-credentials"
+}
+
+data "aws_secretsmanager_secret_version" "postgres" {
+  secret_id = data.aws_secretsmanager_secret.postgres.id
+}
+
+locals {
+  postgres_secret = jsondecode(data.aws_secretsmanager_secret_version.postgres.secret_string)
+}
+
+output "postgres_secret_output" {
+  value     = local.postgres_secret
+  sensitive = true
+}
+
+output "postgres_password_output" {
+  value     = local.postgres_secret["password"]
+  sensitive = true
+}
+
 resource "aws_db_instance" "postgres" { # 4m49
   identifier             = "terraform-postgres"
   instance_class         = "db.t3.micro"
@@ -12,11 +34,13 @@ resource "aws_db_instance" "postgres" { # 4m49
   engine                 = "postgres"
   engine_version         = "15.3"
   username               = "postgres"
-  password               = "Sup3rS3cret!"
+  #password               = "Sup3rS3cret!"
+  password               = local.postgres_secret["password"]
   db_subnet_group_name   = aws_db_subnet_group.terraform_rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds.id]
 #  parameter_group_name   = aws_db_parameter_group.postgres.name
-  publicly_accessible    = true
+  publicly_accessible    = false
+  #publicly_accessible    = false
   skip_final_snapshot    = true
 }
 
@@ -28,27 +52,33 @@ resource "aws_security_group" "rds" { # 5s
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    #cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [module.eks.cluster_primary_security_group_id, module.eks.node_security_group_id]
   }
 
   egress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
 resource "aws_db_subnet_group" "terraform_rds_subnet_group" { #2s
   name       = "terraform_rds_subnet_group"
-  subnet_ids = module.vpc.public_subnets
+  #subnet_ids = module.vpc.public_subnets
+  subnet_ids = module.vpc.private_subnets
 }
 
 output "db-endpoint" {
     value = aws_db_instance.postgres.endpoint
 }
 
+output "eks" {
+  value     = module.eks
+}
 ##################################################  Create EKS  ##################################################
+# To get access: aws eks update-kubeconfig --name terraform-cluster --region us-west-1
 module "eks" { # 803.92s - 6.2287s =797s
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 19.0"
@@ -126,7 +156,7 @@ module "vpc" { #142.6322s -17.27 =125s
   name = "terraform-vpc"
   cidr = "10.0.0.0/16"
 
-  azs             = ["eu-west-1a", "eu-west-1b"]
+  azs             = ["us-west-1a", "us-west-1c"]
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
 
@@ -262,6 +292,9 @@ resource "kubernetes_deployment" "demo_deployment" { #28s
       metadata {
         labels = {
           App = "spring-boot-demo"
+        }
+        annotations = {
+          "kubectl.kubernetes.io/restartedAt" = timestamp()
         }
       }
 

@@ -222,3 +222,6 @@ resource "google_compute_instance" "bastion" {
 EOF
   }
 }
+
+
+# gcloud compute ssh private-cluster-bastion --project cci-sandbox-danial --zone us-central1-c --command uptime
