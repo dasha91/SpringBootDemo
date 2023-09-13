@@ -1,6 +1,6 @@
-##################################################  Create Postgres  #################################################
+##################################################  Create Postgres (10m 46) #################################################
 # terraform import google_container_cluster.spring_boot_cluster cci-sandbox-danial/us-west1-b/spring-boot-cluster
-resource "google_sql_database_instance" "postgres_instance" { #7m 48s
+resource "google_sql_database_instance" "postgres_instance" { # 9m 20s
   database_version = "POSTGRES_14"
   name             = "terraform-postgres-instance"
   project = var.project_id
@@ -12,12 +12,13 @@ resource "google_sql_database_instance" "postgres_instance" { #7m 48s
       ipv4_enabled                                  = false
       private_network                               = google_compute_network.custom_vpc.id
     }
+  
     availability_type = "REGIONAL" 
   }
   depends_on = [google_service_networking_connection.private_vpc_connection]
 }
 
-resource "google_compute_global_address" "private_ip_address" {
+resource "google_compute_global_address" "private_ip_address" { # 12s
   project = var.project_id
   name          = "private-ip-address"
   purpose       = "VPC_PEERING"
@@ -26,7 +27,7 @@ resource "google_compute_global_address" "private_ip_address" {
   network       = google_compute_network.custom_vpc.id
 }
 
-resource "google_service_networking_connection" "private_vpc_connection" {
+resource "google_service_networking_connection" "private_vpc_connection" { # 42s
   network                 = google_compute_network.custom_vpc.id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
@@ -37,7 +38,7 @@ resource "google_sql_database" "demo-db" { #5s
   instance = google_sql_database_instance.postgres_instance.name
 }
 
-resource "google_sql_user" "users" { #8s
+resource "google_sql_user" "users" { #7s
   name     = "postgres"
   instance = google_sql_database_instance.postgres_instance.name
   password = data.google_secret_manager_secret_version.db_password.secret_data
@@ -47,13 +48,12 @@ data "google_secret_manager_secret_version" "db_password" {
   secret = "postgres-password"
 }
 
-##################################################  Creating Cloud SQL Proxy (Counts as Postgres)##################################################
-resource "google_service_account" "postgres_springboot_demo_sa" { #2s
+resource "google_service_account" "postgres_springboot_demo_sa" { #1s
   account_id   = "postgres-terraform-sa"
   project      = var.project_id
 }
 
-resource "kubernetes_service_account" "kubernetes_sa" {
+resource "kubernetes_service_account" "kubernetes_sa" { # 1s
   metadata {
     name = "kubernetes-sa"
     annotations = {
@@ -97,7 +97,7 @@ resource "google_service_account_iam_binding" "admin-account-iam" { # 4s
 ##################################################  Create GKE  ##################################################
 # To Get cluster credentials: gcloud container clusters get-credentials cci-sandbox-danial-terraform-gke --zone=us-west1
 
-resource "google_container_cluster" "gke" { #5m 46s
+resource "google_container_cluster" "gke" { #5m 35s
   project = var.project_id
   name    = "${var.project_id}-terraform-gke"
   location = var.region
@@ -107,37 +107,37 @@ resource "google_container_cluster" "gke" { #5m 46s
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
+
+  ip_allocation_policy {
+    cluster_secondary_range_name  = google_compute_subnetwork.custom_subnet.secondary_ip_range.0.range_name
+    services_secondary_range_name = google_compute_subnetwork.custom_subnet.secondary_ip_range.1.range_name
+  }
 }
 
 output gke-name {
   value = google_container_cluster.gke.name
 }
 
-resource "google_compute_network" "custom_vpc" {
+resource "google_compute_network" "custom_vpc" { # 22s
   name                    = "terraform-vpc"
   auto_create_subnetworks = false 
 }
 
-resource "google_compute_firewall" "allow_internet_ingress" {
-  name    = "allow-terraform-ingress"
-  network = google_compute_network.custom_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["80","5432"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  direction     = "INGRESS"
-}
-
-
 # Create a subnet in the VPC
-resource "google_compute_subnetwork" "custom_subnet" {
+resource "google_compute_subnetwork" "custom_subnet" { # 22s
   name          = "terraform-subnet"
   ip_cidr_range = "192.168.0.0/20"
   region        = var.region
   network       = google_compute_network.custom_vpc.self_link
+  secondary_ip_range {
+    range_name    = "pod-ranges"
+    ip_cidr_range = "10.156.0.0/14"
+  }
+
+  secondary_ip_range {
+    range_name    = "services-range"
+    ip_cidr_range = "10.160.0.0/20"
+  }
 }
 
 ##################################################  Creating deployment with ingress ##################################################
@@ -159,6 +159,7 @@ resource "kubernetes_ingress_v1" "ingress" { #1s
       }
     }
   }
+  depends_on = [ google_container_cluster.gke ]
 }
 
 resource "kubernetes_service" "lb" { #1m 26s
@@ -179,6 +180,7 @@ resource "kubernetes_service" "lb" { #1m 26s
 
     type = "LoadBalancer"
   }
+  depends_on = [ google_container_cluster.gke ]
 }
 
 // This is the vote application that we are deploying. It's the same as the applications above and is based off 
@@ -205,7 +207,7 @@ resource "kubernetes_deployment" "spring-boot-demo" { #26s
       spec {
         service_account_name = kubernetes_service_account.kubernetes_sa.metadata.0.name
         container {
-          image = "us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v1"
+          image = "us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v3"
           name  = "spring-boot-demo"
           env {
             name = "DB_USER"
@@ -261,6 +263,7 @@ resource "kubernetes_deployment" "spring-boot-demo" { #26s
       }
     }
   }
+  depends_on = [ google_container_cluster.gke ]
 }
 
 

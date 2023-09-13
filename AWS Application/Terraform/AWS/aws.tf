@@ -4,7 +4,7 @@ https://aws-ia.github.io/terraform-aws-eks-blueprints/v4.32.1/core-concepts/
 https://antonputra.com/amazon/create-eks-cluster-using-terraform-modules/#deploy-aws-load-balancer-controller
 */
 
-##################################################  Create Postgres  #################################################
+##################################################  Create Postgres (3m 37s) #################################################
 data "aws_secretsmanager_secret" "postgres" {
   name = "postgres-credentials"
 }
@@ -17,34 +17,21 @@ locals {
   postgres_secret = jsondecode(data.aws_secretsmanager_secret_version.postgres.secret_string)
 }
 
-output "postgres_secret_output" {
-  value     = local.postgres_secret
-  sensitive = true
-}
-
-output "postgres_password_output" {
-  value     = local.postgres_secret["password"]
-  sensitive = true
-}
-
-resource "aws_db_instance" "postgres" { # 4m49
+resource "aws_db_instance" "postgres" { # 3m33s
   identifier             = "terraform-postgres"
   instance_class         = "db.t3.micro"
   allocated_storage      = 5
   engine                 = "postgres"
   engine_version         = "15.3"
   username               = "postgres"
-  #password               = "Sup3rS3cret!"
   password               = local.postgres_secret["password"]
   db_subnet_group_name   = aws_db_subnet_group.terraform_rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-#  parameter_group_name   = aws_db_parameter_group.postgres.name
   publicly_accessible    = false
-  #publicly_accessible    = false
   skip_final_snapshot    = true
 }
 
-resource "aws_security_group" "rds" { # 5s
+resource "aws_security_group" "rds" { # 3s
   name   = "terraform_rds_security_group"
   vpc_id = module.vpc.vpc_id
 
@@ -52,7 +39,6 @@ resource "aws_security_group" "rds" { # 5s
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    #cidr_blocks = ["0.0.0.0/0"]
     security_groups = [module.eks.cluster_primary_security_group_id, module.eks.node_security_group_id]
   }
 
@@ -64,9 +50,8 @@ resource "aws_security_group" "rds" { # 5s
   }
 }
 
-resource "aws_db_subnet_group" "terraform_rds_subnet_group" { #2s
+resource "aws_db_subnet_group" "terraform_rds_subnet_group" { #1s
   name       = "terraform_rds_subnet_group"
-  #subnet_ids = module.vpc.public_subnets
   subnet_ids = module.vpc.private_subnets
 }
 
@@ -77,9 +62,9 @@ output "db-endpoint" {
 output "eks" {
   value     = module.eks
 }
-##################################################  Create EKS  ##################################################
+##################################################  Create EKS (11m 48s) ##################################################
 # To get access: aws eks update-kubeconfig --name terraform-cluster --region us-west-1
-module "eks" { # 803.92s - 6.2287s =797s
+module "eks" { # 11m 34.3926s 
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 19.0"
 
@@ -122,9 +107,9 @@ module "eks" { # 803.92s - 6.2287s =797s
 
     # EKS Managed Node Group(s)
     eks_managed_node_group_defaults = {
-    ami_type                   = "AL2_x86_64"
-    instance_types             = ["t3.medium"]
-    iam_role_attach_cni_policy = true
+      ami_type                   = "AL2_x86_64"
+      instance_types             = ["t3.medium"]
+      iam_role_attach_cni_policy = true
     }
 
     eks_managed_node_groups = {
@@ -134,23 +119,13 @@ module "eks" { # 803.92s - 6.2287s =797s
             desired_size =  2
         }
     }
-#     node_security_group_additional_rules = {
-#         ingress_allow_access_from_control_plane = {
-#         type                          = "ingress"
-#         protocol                      = "tcp"
-#         from_port                     = 9443
-#         to_port                       = 9443
-#         source_cluster_security_group = true
-#         description                   = "Allow access from control plane to webhook port of AWS load balancer controller"
-#         }
-#   }
     tags = {
         "elbv2.k8s.aws/cluster" = "true"
     }
 }
 
 
-module "vpc" { #142.6322s -17.27 =125s
+module "vpc" { #2m 23s
   source = "terraform-aws-modules/vpc/aws"
 
   name = "terraform-vpc"
@@ -171,26 +146,9 @@ module "vpc" { #142.6322s -17.27 =125s
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = "1"
   }
-
 }
-##################################################  Creating deployment with ingress ##################################################
-module "vpc_cni_irsa_role" { #4sec
-  source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-
-  role_name = "vpc-cni"
-
-  attach_vpc_cni_policy = true
-  vpc_cni_enable_ipv4   = true
-
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["default:my-app", "canary:my-app"]
-    }
-  }
-}
-
-resource "helm_release" "aws_load_balancer_controller" { #22sec
+##################################################  Creating deployment with ingress (2m 19s) ##################################################
+resource "helm_release" "aws_load_balancer_controller" { #2m 1s
   name = "aws-load-balancer-controller"
 
   repository = "https://aws.github.io/eks-charts"
@@ -276,7 +234,7 @@ resource "kubernetes_service" "nodeport" { #1s
   }
 }
 
-resource "kubernetes_deployment" "demo_deployment" { #28s
+resource "kubernetes_deployment" "demo_deployment" { #2m 17s
   metadata {
     name = "deployment"
   }
@@ -293,9 +251,6 @@ resource "kubernetes_deployment" "demo_deployment" { #28s
         labels = {
           App = "spring-boot-demo"
         }
-        annotations = {
-          "kubectl.kubernetes.io/restartedAt" = timestamp()
-        }
       }
 
       spec {
@@ -308,7 +263,7 @@ resource "kubernetes_deployment" "demo_deployment" { #28s
   }
 }
 
-module "aws_load_balancer_controller_irsa_role" { #2s
+module "aws_load_balancer_controller_irsa_role" { #1s
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
    version = "~> 5.0"
 
@@ -339,3 +294,4 @@ module "vpc_cni_irsa" { #5s
     }
   }
 }
+

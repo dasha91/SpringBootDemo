@@ -55,7 +55,7 @@ spec:
       serviceAccountName: kubernetes-sa
       containers:
       - name: spring-boot-demo
-        image: us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v1
+        image: us-west1-docker.pkg.dev/cci-sandbox-danial/spring-boot-demo-repo/spring-boot-demo:v2
         env:
         - name: DB_USER
           valueFrom:
