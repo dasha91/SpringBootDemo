@@ -13,37 +13,12 @@ export vnetName=cli-vnet
 export subnetName=cli-subnet
 export keyvaultName=AXA-Compete-Key-Vault
 
-##################################################  Create AKS (4m 15.1777s)  ################################################## 
-#https://learn.microsoft.com/en-us/azure/postgresql/single-server/how-to-configure-privatelink-portal
+##################################################  Create Postgres (4m 29.6861s) #################################################
 # 9.1576s
 az group create --name $resourceGroup --location "$location" | gnomon
 
-# Following: https://learn.microsoft.com/en-us/azure/postgresql/single-server/how-to-configure-privatelink-cli (TODO documentation is buggy. commands have weird includes and the postgres create isn't private which should be given the doc)
-# What, where is mydemopostgressserver coming from at the end????
-# 14.2188s
-az network vnet create --name $vnetName --resource-group $resourceGroup --subnet-name $subnetName | gnomon
-
-#2.4336s
-az network vnet subnet update --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --disable-private-endpoint-network-policies true | gnomon
-
-# 1.8258s
-subnetId=$(az network vnet subnet show --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --query "id" -o tsv) | gnomon 
-
-# 226.0126s
-az aks create -n $clusterName -g  $resourceGroup --generate-ssh-keys --attach-acr $containerRegistry --vnet-subnet-id $subnetId --service-cidr 10.1.0.0/16 --network-plugin azure  --dns-service-ip 10.1.0.10 | gnomon  
-
-# 1.4867s
-az aks get-credentials -g $resourceGroup -n $clusterName | gnomon 
-
-##################################################  Create Postgres (4m 29.6861s) #################################################
 # 3.6951s
 export password=$(az keyvault secret show --name "postgres-password" --vault-name $keyvaultName --query "value" -o tsv) | gnomon
-
-# 1.0426s
-kubectl create secret generic kubernetes-db-secret \
-  --from-literal=username=postgres \
-  --from-literal=password=$password \
-  --from-literal=database=$databaseName | gnomon 
 
 # 129.8412s
 az postgres server create --name $server --resource-group $resourceGroup --location "$location" --admin-user $login --admin-password $password --sku-name $sku --public disabled | gnomon
@@ -54,6 +29,9 @@ az postgres db create -g $resourceGroup -s $server -n $databaseName | gnomon
 #1.5286s
 export postgresId=$(az resource show -g $resourceGroup -n $server --resource-type "Microsoft.DBforPostgreSQL/servers" --query "id" -o tsv) | gnomon
 
+# Useful docs: https://learn.microsoft.com/en-us/azure/postgresql/single-server/how-to-configure-privatelink-portal
+# Following: https://learn.microsoft.com/en-us/azure/postgresql/single-server/how-to-configure-privatelink-cli (TODO documentation is buggy. commands have weird includes and the postgres create isn't private which should be given the doc)
+# What, where is mydemopostgressserver coming from at the end????
 # 34.5843s
 az network private-endpoint create --name myPrivateEndpoint --resource-group $resourceGroup --vnet-name $vnetName --subnet $subnetName --private-connection-resource-id $postgresId --group-id postgresqlServer --connection-name cli-postgres-connection | gnomon 
 
@@ -82,11 +60,35 @@ az acr create -n $containerRegistry -g $resourceGroup --sku basic | gnomon
 az acr login --name $containerRegistry | gnomon 
 
 # 2.1747s
-docker buildx build --platform=linux/amd64 -t $containerRegistry.azurecr.io/spring-boot-demo:v4 . | gnomon 
+docker buildx build --platform=linux/amd64 -t $containerRegistry.azurecr.io/spring-boot-demo:v1 . | gnomon 
 
 # Need to also update the deployment image in the azure.yaml file with whatever version is below
 # 144.4219s
-docker push $containerRegistry.azurecr.io/spring-boot-demo:v4 | gnomon 
+docker push $containerRegistry.azurecr.io/spring-boot-demo:v | gnomon 
+
+##################################################  Create AKS (4m 15.1777s)  ################################################## 
+
+
+# 14.2188s
+az network vnet create --name $vnetName --resource-group $resourceGroup --subnet-name $subnetName | gnomon
+
+#2.4336s
+az network vnet subnet update --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --disable-private-endpoint-network-policies true | gnomon
+
+# 1.8258s
+subnetId=$(az network vnet subnet show --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --query "id" -o tsv) | gnomon 
+
+# 226.0126s
+az aks create -n $clusterName -g  $resourceGroup --generate-ssh-keys --attach-acr $containerRegistry --vnet-subnet-id $subnetId --service-cidr 10.1.0.0/16 --network-plugin azure  --dns-service-ip 10.1.0.10 | gnomon  
+
+# 1.4867s
+az aks get-credentials -g $resourceGroup -n $clusterName | gnomon 
+
+# 1.0426s (Counts as postgres)
+kubectl create secret generic kubernetes-db-secret \
+  --from-literal=username=postgres \
+  --from-literal=password=$password \
+  --from-literal=database=$databaseName | gnomon 
 
 ##################################################  Installing Ingress controller (24.3502s) ##################################################
 # 0.4219s

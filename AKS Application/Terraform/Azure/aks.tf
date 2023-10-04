@@ -248,8 +248,23 @@ resource "kubernetes_deployment" "demo_deployment" { #27s
 
       spec {
         container {
-          image = "postgresacr.azurecr.io/spring-boot-demo:v4"
+          image = "postgresacr.azurecr.io/spring-boot-aks:v1"
           name  = "spring-boot-demo"
+
+          env {
+            name  = "SPRING_DATASOURCE_URL"
+            value = "jdbc:postgresql://myserver.privatelink.postgres.database.azure.com:5432/demo?sslmode=require"
+          }
+
+          env {
+            name  = "SPRING_DATASOURCE_USERNAME"
+            value = "postgres@aks-terraform-postgres"
+          }
+
+          env {
+            name  = "SPRING_DATASOURCE_PASSWORD"
+            value = "Sup3rS3cret!"
+          }
         }
       }
     }

@@ -5,7 +5,7 @@ export repo_name=springboot-repo
 export postgres_name=springboot-postgres
 export region=us-west-1
 
-
+Sup3rS3cret!
 ##################################################  Create EKS Cluster (12m 52.863s)  ##################################################
 
 # First followed this guide which used cloudformation, which was a bad experience. Unclear what was created and 
