@@ -40,3 +40,5 @@ build/
 **/*.tfstate
 **/*.tfstate.*
 **/.terraform/*
+
+CLI/deployment.yaml

@@ -44,5 +44,12 @@ spec:
         app:  spring-boot-demo
     spec:
       containers:
-      - image: postgresacr.azurecr.io/spring-boot-demo:v3
+      - image: <IMAGE_NAME>
         name: spring-boot-demo
+        env: 
+          - name: SPRING_DATASOURCE_URL
+            value: jdbc:postgresql://<DNS>:5432/<DB_NAME>?sslmode=require
+          - name: SPRING_DATASOURCE_USERNAME
+            value: <USERNAME>
+          - name: SPRING_DATASOURCE_PASSWORD
+            value: <PASSWORD>
