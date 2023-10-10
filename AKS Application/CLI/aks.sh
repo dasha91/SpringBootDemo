@@ -13,10 +13,8 @@ export databaseName=demo
 export vnetName=aks-postgres-vnet
 export subnetName=aks-postgres-subnet
 
-
 # Generate random password
 export password=$(date | base64)
-echo "Password: $password"
 
 ##################################################  Create Postgres #################################################
 
@@ -28,14 +26,11 @@ az postgres db create -g $resourceGroup -s $server -n $databaseName
 
 export postgresId=$(az resource show -g $resourceGroup -n $server --resource-type "Microsoft.DBforPostgreSQL/servers" --query "id" -o tsv) 
 
-
 az network vnet create --name $vnetName --resource-group $resourceGroup --subnet-name $subnetName 
 
 az network vnet subnet update --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --disable-private-endpoint-network-policies true 
 
 subnetId=$(az network vnet subnet show --name $subnetName --resource-group $resourceGroup --vnet-name $vnetName --query "id" -o tsv)  
-
-
 
 az network private-endpoint create --name myPrivateEndpoint --resource-group $resourceGroup --vnet-name $vnetName --subnet $subnetName --private-connection-resource-id $postgresId --group-id postgresqlServer --connection-name cli-postgres-connection  
 
@@ -59,6 +54,7 @@ az acr login --name $containerRegistry
 
 export IMAGE=$containerRegistry.azurecr.io/spring-boot-demo:v1
 
+# Use "docker build -t $IMAGE ../." if on non M1 mac
 docker buildx build --platform=linux/amd64 -t $IMAGE ../.  
 
 docker push $IMAGE  
@@ -88,3 +84,25 @@ sed -e "s|<IMAGE_NAME>|${IMAGE}|g" \
     -e "s|<PASSWORD>|${password}|g" deployment-template.yaml > deployment.yaml
 
 kubectl apply -f deployment.yaml 
+
+
+echo "Retrieving AKS Ingress IP Address..."
+while true; do
+    aks_cluster_ip=$(kubectl get ingress ingress -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    if [[ -n "$aks_cluster_ip" ]]; then
+        echo "AKS Ingress IP Address is: $aks_cluster_ip"
+        break
+    else
+        echo "Waiting for AKS Ingress IP Address to be assigned..."
+        sleep 15s
+    fi
+done
+
+echo "---------- AKS ----------"
+echo "AKS Ingress IP Address: $aks_cluster_ip"
+echo "To access the AKS cluster, use the following command:"
+echo "az aks get-credentials -g $resourceGroup -n aks-terraform-cluster"
+echo "the postgres username is $USER and the password is $password"
+echo ""
+
+
